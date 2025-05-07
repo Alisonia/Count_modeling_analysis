@@ -1,0 +1,247 @@
+---
+title: "MATH 532 Project Presentation"
+subtitle: "Mpox Surveillance and Reporting in Nigeria: Insights from Count Data Modeling"
+author: "Aliu A. Adebiyi"
+date: "`r Sys.Date()`"
+output: beamer_presentation
+theme: "Boadilla"
+colortheme: "whale"
+fonttheme: "serif"
+fontsize: 8
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE, warning = FALSE, message = FALSE)
+```
+
+```{r}
+#libraries
+library(faraway)
+library(ggplot2)
+library(tidyverse)
+library(readxl)
+```
+
+## Introduction
+
+- Monkeypox is a zoonotic disease caused by infection with the Monkeypox Virus (MPXV), an orthopoxvirus with symptoms similar but less severe than smallpox (Precious et al., 2023).
+
+- Its burden is more pronounced in developing countries, making the outbreak a global concern (Precious et al., 2023).
+
+- In Nigeria, preparedness and timely response are vital, hence the recent effort by the Nigeria Centre for Disease Control (NCDC) to collate reported cases across states.
+
+- This project analyzes Mpox data (2017–2024) using count regression models to identify factors influencing reported cases across Nigerian states.
+
+## Study Design and Data Sources
+- This is an ecological study of Mpox cases reported in Nigeria between 2017 and 2024.
+
+- Data on reported cases were obtained from the NCDC (NCDC, 2024).
+
+- Explanatory variables—population density, GDP per capita, literacy, temperature, and region—were sourced from the Nigerian Bureau of Statistics (NBS, 2021).
+
+- Variable selection was based on prior studies on COVID-19 distribution in Nigeria (Daniel & Adejumo, 2021).
+
+## Count Regression Modelling
+Let \( Y_i \) be the number of reported cases. Since the response variable is count data, we use a **Poisson regression model**(Faraway, 2016):
+
+\[
+Y_i \sim \text{Poisson}(\mu_i), \quad \text{where} \quad E(Y_i) = \mu_i, \quad \text{Var}(Y_i) = \mu_i
+\]
+
+A **log link function** relates the mean to the predictors:
+
+\[
+\log(\mu_i) = \mathbf{X}_i^T \boldsymbol{\beta}
+\quad \Rightarrow \quad
+\mu_i = \exp(\mathbf{X}_i^T \boldsymbol{\beta})
+\]
+
+Here, \( \mathbf{X}_i \) is a vector of predictors and \( \boldsymbol{\beta} \) is the vector of coefficients.
+
+## Procedure for Count Modelling Analysis
+- Plotted the response variable against one or more predictors.
+
+- Fitted a Poisson model using all predictors.
+
+- Checked deviance and residual plots for model fit.
+
+- Evaluated the dispersion parameter to detect overdispersion.
+
+- Fitted a Negative Binomial model to handle overdispersion and checked diagnostics.
+
+- Compared the full model with the null (intercept-only) model.
+
+- Used stepwise selection to identify significant predictors and fitted a reduced model.
+
+- Interpreted the final model and drew conclusions.
+
+## Data Exploration
+```{r}
+#loading the data
+mpox <- read_xlsx("mpox.xlsx", sheet = "mpox_total_states")
+```
+
+```{r, echo=TRUE}
+head(mpox)
+```
+
+```{r, echo=TRUE}
+dim(mpox)
+```
+
+## Data Exploration
+
+```{r}
+# Summary Statistics by Region
+region_summary <- mpox %>%
+  group_by(region) %>%
+  summarise(
+    total_cases = sum(cases, na.rm = TRUE),
+    avg_reported_cases = mean(cases, na.rm = TRUE),
+    .groups = 'drop'
+  ) %>%
+  arrange(desc(avg_reported_cases))
+
+ggplot(region_summary, aes(x = reorder(region, -avg_reported_cases), 
+                         y = avg_reported_cases, fill = avg_reported_cases)) +
+  geom_bar(stat = "identity") +
+  scale_fill_gradient(low = "lightblue", high = "blue", name = "Cases/million") +
+  labs(title = "Average Reported Mpox Cases by Region", 
+       x="Region",y="Cases reported",
+       caption="Data source: Nigeria CDC and Nigeria Bureau of Statistics") +
+  theme_bw()
+```
+
+## Analysis - Scatter Plots
+```{r}
+#Scatter plot
+par(mfrow = c(2, 2))
+plot(mpox$pop_density, mpox$cases,
+     xlab = "Population Density (people/km²)", 
+     ylab = "Reported Mpox Cases",
+     main = "Cases vs. Population Density",
+     pch = 19, col = "steelblue")
+abline(lm(cases ~ pop_density, data = mpox), col = "red", lwd = 2)
+
+plot(mpox$gdp_per_capital, mpox$cases,
+     xlab = "GDP per Capita ('000$)", ylab=" ",
+     main = "Cases vs. GDP per Capita",
+     pch = 19, col = "darkgreen")
+abline(lm(cases ~ gdp_per_capital, data = mpox), col = "red", lwd = 2)
+
+plot(mpox$literacy, mpox$cases,
+     xlab = "Literacy Rate (%)", 
+     ylab = "Reported Mpox Cases",
+     main = "Cases vs. Literacy",
+     pch = 19, col = "purple")
+abline(lm(cases ~ literacy, data = mpox), col = "red", lwd = 2)
+
+plot(mpox$avg_temp, mpox$cases,
+     xlab = "Average Temperature (°C)", ylab = " ",
+     main = "Cases vs. Temperature",
+     pch = 19, col = "orange")
+abline(lm(cases ~ avg_temp, data = mpox), col = "red", lwd = 2)
+```
+
+## Analysis - Poisson Model.
+```{r}
+mpox$region<-factor(mpox$region)
+mpox$region<-relevel(mpox$region, ref = "North") #making north the reference category
+```
+
+```{r cars, echo=TRUE}
+pois_mod <- glm(cases~.-state, data=mpox, family="poisson")
+sumary(pois_mod)
+```
+
+## Analysis - Diagnostic
+**Plots of Residuals, Poisson Model**
+```{r}
+resid_dev <- rstandard(pois_mod) #Standardized deviance residuals
+qqnorm(resid_dev, main = "QQ Plot of Deviance Residuals") # QQ plot
+qqline(resid_dev, col = "red")
+```
+
+## Analysis - Diagnostic
+
+**Over-dispersion Parameter**
+```{r, echo=TRUE}
+dp = pois_mod$deviance/pois_mod$df.residual
+dp
+```
+
+This necessitate the use of count regression modeling that account for over dispersion parameters as an alternative.
+
+## Analysis - Negative Binomial Regression
+```{r}
+library(MASS)
+```
+
+```{r, echo=TRUE}
+nb_mod <-glm.nb(cases ~ . -state, data = mpox)
+nb_mod
+```
+## Analysis - AIC criterion for significant predictors
+```{r, echo=TRUE}
+step(nb_mod, trace = 0)
+```
+## Analysis - Reduced Model
+```{r, echo=TRUE}
+reduced_mod <- glm.nb(cases~gdp_per_capital+literacy -state, data = mpox)
+summary(reduced_mod)
+```
+## Analysis - Diagnostic
+```{r}
+resid_nb_r <- rstandard(reduced_mod) #Standardized deviance residuals
+qqnorm(resid_nb_r, main = "QQ Plot of Deviance Residuals") # QQ plot
+qqline(resid_nb_r, col = "red")
+```
+
+## Result and Interpretation
+```{r }
+library(effects)
+eff <- allEffects(reduced_mod)
+print(plot(eff))
+```
+
+## Result and Interpretation 
+```{r, echo=TRUE}
+exp(coef(reduced_mod))
+```
+
+The coefficient of GDP per capita gives $exp(0.747) = 2.11$ indicating that for every unit increase in gdp_per_capital, the expected number of Mpox cases increases by a factor of 2.11 holding literacy constant. Also, Literacy has a coefficient of $exp(0.019) = 1.02$ meaning that for every 1% increase in literacy rate, the expected number of Mpox cases increases by about 2%, holding GDP constant. \
+\
+The implication of this result is that higher reported cases in wealthier and more literate regions may reflect better surveillance, health infrastructure, and awareness, rather than higher actual transmission.
+
+## Conclusion 
+- A Negative Binomial model was used to examine factors influencing reported Mpox cases in Nigeria.
+
+- After adjusting for over-dispersion, GDP per capita and literacy rate emerged as key predictors.
+
+- Regions with higher GDP per capita were over 2 times more likely to report Mpox cases, suggesting stronger surveillance and reporting systems.
+
+- Literacy showed a modest positive effect, indicating the role of awareness and information access in disease detection.
+
+- Results underline the importance of socioeconomic and educational factors in public health surveillance across regions.
+
+## References
+
+- Daniel, O. J., & Adejumo, O. A. (2021). *Spatial distribution of COVID-19 in Nigeria*. West African Journal of Medicine, 38(8), 732–737.
+
+- Faraway, J. J. (2016). *Extending the Linear Model with R: Generalized Linear, Mixed Effects and Nonparametric Regression Models* (2nd ed.). Chapman and Hall/CRC.
+
+- Nigerian Centre for Disease Control (NCDC). (2024). *Update on Mpox (MPX) in Nigeria*. Retrieved from [www.ncdc.gov.ng](https://www.ncdc.gov.ng)
+
+- Nigerian Data Portal. (2021). *State population 2006*. Retrieved from [https://nigeria.opendataforafrica.org/ifpbxbd](https://nigeria.opendataforafrica.org/ifpbxbd)
+
+- Precious, N. D., Agboola, P., Oluwatimilehin, O., Olakunle, O. K., Olaniyi, P., Adiatu, A. I., Olusogo, A. P., Obiwulu, D. J., Adeola, O. A., Ebubechukwu, E. S., Oluwakayode, A. M., Akano, O. S., & Kolawole, Q. O. (2023). Re-emergence of monkeypox virus outbreak in Nigeria: Epidemic preparedness and response (Review-Commentary). *Annals of Medicine and Surgery*, 85(8), 3990–3996. https://doi.org/10.1097/MS9.0000000000001069}
+
+
+## Final Slide
+
+\begin{center}
+\Huge \textbf{THANK YOU}
+\end{center}
+
+\
+Download the code and the complete Rmarkdown file from [\textcolor{blue}{my github}](https://github.com/Alisonia?tab=repositories) 
